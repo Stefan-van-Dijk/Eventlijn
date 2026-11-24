@@ -2,18 +2,15 @@
 
 **Ga eropuit. Breng iets moois terug.**
 
-Een onderhoudsarm evenementenplatform voor organisaties.
+Een zelfstandige webapp voor organisatie-evenementen. De tijdlijn ondersteunt zoeken, meerdaagse evenementen en suggesties voor dubbele registraties. Een organisatiebeheerder nodigt medewerkers en leidinggevenden uit en activeert hun accounts nadat hun e-mailadres is bevestigd.
 
-## Productrichting
-- Doorzoekbare tijdlijn, meerdaagse evenementen en suggesties voor dubbele registraties.
-- Organisatiebeheerder bevestigt nieuwe accounts; medewerkers geven hun leidinggevende op.
-- Leidinggevende beoordeelt eerst, centraal beheer neemt het eindbesluit en kan dit herzien.
-- Medewerkers zien eigen aanvragen; leidinggevenden alleen toegewezen aanvragen; centraal beheer ziet de eigen organisatie.
-- Vrije of goedkeuringsplichtige inschrijving voor interne evenementen.
-- Flexibele opvolging, mondeling afsluiten en verwijzingen naar externe kennis; vrijwillige spotlights in samenspraak.
+Aanvragen gaan van de toegewezen leidinggevende naar organisatiebeheer. Organisatiebeheer neemt het eindbesluit en kan het herzien. Interne evenementen kunnen ook vrije inschrijving hebben. Medewerkers zien hun eigen aanvragen, leidinggevenden hun toegewezen aanvragen en organisatiebeheer de eigen organisatie. Terugkoppeling kan schriftelijk of mondeling. De beheerder kan een vrijwillig voorgestelde spotlight na afstemming intern publiceren.
 
-## Technische grenzen
-Publieke broncode, private runtimegegevens. Geen persoonsgegevens, tokens of productiegegevens in Git. Geen AFAS- of Microsoft-koppeling vereist voor de eerste versie. Een browserdemo is geen beveiligde productieomgeving. Serverautorisatie, e-mailverificatie, organisatie-isolatie, veilige opslag, back-ups en bewaartermijnen zijn voorwaarden voor productiegebruik. Organisatieoverstijgende evenementdeling is nog een open ontwerpbesluit.
+De optionele Sharon-overdracht bewaart na bevestiging een persoonlijke notitie van een eigen goedgekeurde deelname. De zelfstandige app gebruikt PHP 8.1+, privésessies en afgeschermde JSON-opslag. Organisatieoverstijgende evenementdeling is een open ontwerpbesluit.
 
-## Status
-Initiële projectinrichting. Productiebackend en hosting zijn nog niet gerealiseerd.
+## Installeren en testen
+
+- Zie [installatie voor sharon.life](server/INSTALL.md) en [optionele Sharon-overdracht](integrations/sharon/INSTALL.md).
+- `php tests/storage.php` controleert opslag en isolatie.
+- `python3 tests/http_flows.py` test de app via een lokale PHP-server met een afgeschermde testmailbox. Zet `PHP` als de PHP-binary een afwijkend pad heeft.
+- [Statische demo](demo.html) gebruikt fictieve lokale gegevens en kan los van de productieapp worden geopend.

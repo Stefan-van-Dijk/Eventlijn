@@ -8,7 +8,7 @@ final class EventStore {
         $root = realpath($documentRoot);
         $dir = realpath($directory);
         if ($root === false || $dir === false || !is_dir($dir) || !is_writable($dir)
-            || $dir === $root || str_starts_with($dir, rtrim($root, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR)) {
+            || (fileperms($dir) & 0077) !== 0 || $dir === $root || str_starts_with($dir, rtrim($root, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR)) {
             throw new RuntimeException('Private storage unavailable');
         }
         $this->directory = $dir;
