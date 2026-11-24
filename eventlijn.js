@@ -31,7 +31,7 @@ const shortDate = new Intl.DateTimeFormat('nl-NL', { day: 'numeric', month: 'sho
 const monthName = new Intl.DateTimeFormat('nl-NL', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const date = value => new Date(value + 'T12:00:00Z');
 const normalize = value => String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-const titleKey = value => normalize(value).replace(/[^a-z0-9]/g, '');
+const titleKey = value => normalize(value).replace(/[^\p{L}\p{N}]/gu, '');
 
 let state;
 let view = 'events';
@@ -278,6 +278,21 @@ function today() {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Amsterdam' }).format(new Date());
 }
 
+function similarTitle(left, right, limit) {
+  if (Math.abs(left.length - right.length) > limit) return false;
+  let row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (const [index, letter] of left.split('').entries()) {
+    const next = [index + 1];
+    for (let column = 1; column <= right.length; column++) {
+      next[column] = Math.min(row[column] + 1, next[column - 1] + 1,
+        row[column - 1] + Number(letter !== right[column - 1]));
+    }
+    if (Math.min(...next) > limit) return false;
+    row = next;
+  }
+  return row[right.length] <= limit;
+}
+
 function eventFor(id) {
   return state.events.find(event => event.id === id);
 }
@@ -285,10 +300,12 @@ function eventFor(id) {
 function renderEvents() {
   const timeline = byId('timeline');
   const query = normalize(byId('search').value.trim());
+  const searchTitle = titleKey(query);
   const filter = byId('filter').value;
   const now = today();
   const events = state.events.filter(event => {
-    const matches = normalize([event.title, event.location, event.topic].join(' ')).includes(query);
+    const matches = normalize([event.title, event.location, event.topic].join(' ')).includes(query) ||
+      (searchTitle.length >= 4 && similarTitle(titleKey(event.title), searchTitle, 2));
     return matches && (filter === 'all' || (filter === 'upcoming' ? event.end >= now : event.end < now));
   }).sort((left, right) => left.start.localeCompare(right.start) || left.title.localeCompare(right.title, 'nl'));
   byId('countEvents').textContent = state.events.length;
@@ -357,7 +374,10 @@ function addEvent() {
     action: { action: 'event.create' }, success: 'Het evenement staat op de tijdlijn.' });
   title.querySelector('input').addEventListener('input', event => {
     const key = titleKey(event.target.value);
-    const matches = key.length >= 4 ? state.events.filter(item => titleKey(item.title).includes(key) || key.includes(titleKey(item.title))).slice(0, 3) : [];
+    const matches = key.length >= 4 ? state.events.filter(item => {
+      const existing = titleKey(item.title);
+      return existing.includes(key) || (existing.length >= 4 && (key.includes(existing) || similarTitle(key, existing, 2)));
+    }).slice(0, 3) : [];
     byId('dialogInfo').textContent = matches.length ? 'Mogelijk al aanwezig · ' + matches.map(item => item.title).join(', ') : original;
   });
   start.querySelector('input').addEventListener('change', event => {
