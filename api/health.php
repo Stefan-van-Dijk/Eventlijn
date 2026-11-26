@@ -21,5 +21,5 @@ try {
     echo '{"service":"eventlijn","storage":"configured","version":"1.0.0"}';
 } catch (Throwable $error) {
     http_response_code(503);
-    echo '{"error":"Eventlijn is niet geconfigureerd of de opslag is niet beschikbaar"}';
+    echo '{"error":"Event Line is niet geconfigureerd of de opslag is niet beschikbaar"}';
 }

@@ -332,7 +332,7 @@ final class Workflow
     {
         $member = $state['members'][$userId] ?? [];
         if (($member['status'] ?? null) === 'active') {
-            MailQueue::add($state, $member['email'], $subject, 'Open Eventlijn om de bijgewerkte aanvraag te bekijken.');
+            MailQueue::add($state, $member['email'], $subject, 'Open Event Line om de bijgewerkte aanvraag te bekijken.');
         }
     }
 

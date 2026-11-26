@@ -120,7 +120,7 @@ async function api(payload) {
   const response = await fetch(apiUrl, options);
   const result = await response.json().catch(() => null);
   if (!response.ok || !result || (payload && result.ok !== true)) {
-    throw new Error(result?.error || 'Eventlijn is tijdelijk onbereikbaar. Probeer het opnieuw.');
+    throw new Error(result?.error || 'Event Line is tijdelijk onbereikbaar. Probeer het opnieuw.');
   }
   return result;
 }
@@ -175,7 +175,7 @@ function showAccess(nextMode) {
   controls.replaceChildren();
   text.hidden = true;
   if (mode === 'verify') {
-    text.textContent = 'Bevestig het e-mailadres dat je voor Eventlijn gebruikt.';
+    text.textContent = 'Bevestig het e-mailadres dat je voor Event Line gebruikt.';
     text.hidden = false;
   }
   if (mode === 'register' || mode === 'invite') {
@@ -213,7 +213,7 @@ accessForm.addEventListener('submit', event => {
     register: 'Controleer je inbox om je e-mailadres te bevestigen.',
     invite: 'Controleer je inbox. Na e-mailbevestiging beoordeelt organisatiebeheer je account.',
     verify: 'Je e-mailadres is bevestigd. Je kunt inloggen.',
-    forgot: 'Als het adres bekend is bij Eventlijn, ontvang je een herstellink.',
+    forgot: 'Als het adres bekend is bij Event Line, ontvang je een herstellink.',
     reset: 'Je wachtwoord is gewijzigd. Je kunt weer inloggen.',
   };
   const activeMode = mode;
@@ -628,7 +628,7 @@ function renderSharon() {
 function sharonHandoff(request) {
   openDialog({
     title: 'Deelname openen in Sharon',
-    explanation: 'Eventlijn geeft alleen de titel, bezoekdag en locatie door. In Sharon kies je of je de notitie lokaal bewaart.',
+    explanation: 'Event Line geeft alleen de titel, bezoekdag en locatie door. In Sharon kies je of je de notitie lokaal bewaart.',
     submit: 'Open Sharon ↗',
     action: { action: 'sharon.handoff', id: request.id },
     after: result => {

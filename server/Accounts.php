@@ -132,7 +132,7 @@ final class Accounts
                     'sessionVersion' => 1,
                 ];
                 $url = $this->token($state, 'verify', ['id' => $id], 86400);
-                MailQueue::add($state, $email, 'Bevestig je Eventlijn-account', "Bevestig je e-mailadres via deze link (24 uur geldig):\n\n" . $url);
+                MailQueue::add($state, $email, 'Bevestig je Event Line-account', "Bevestig je e-mailadres via deze link (24 uur geldig):\n\n" . $url);
             });
             $registry['accounts'][$key] = ['org' => $org, 'id' => $id];
             $registry['organizations'][$org] = true;
@@ -152,7 +152,7 @@ final class Accounts
             if ($member['status'] === 'pending') {
                 foreach ($state['members'] as $admin) {
                     if ($admin['role'] === 'admin' && $admin['status'] === 'active') {
-                        MailQueue::add($state, $admin['email'], 'Nieuw Eventlijn-account ter beoordeling', 'Log in bij Eventlijn om het account te beoordelen.');
+                        MailQueue::add($state, $admin['email'], 'Nieuw Event Line-account ter beoordeling', 'Log in bij Event Line om het account te beoordelen.');
                     }
                 }
             }
@@ -198,7 +198,7 @@ final class Accounts
             }
             $kind = $member['status'] === 'unverified' ? 'verify' : 'reset';
             $url = $this->token($state, $kind, ['id' => $account['id']], 3600);
-            MailQueue::add($state, $email, 'Toegang tot Eventlijn', "Gebruik deze link binnen één uur:\n\n" . $url);
+            MailQueue::add($state, $email, 'Toegang tot Event Line', "Gebruik deze link binnen één uur:\n\n" . $url);
         });
         return $account['org'];
     }
@@ -235,7 +235,7 @@ final class Accounts
                 }
             }
             $url = $this->token($state, 'invite', ['email' => $email, 'role' => $role], 604800);
-            MailQueue::add($state, $email, 'Uitnodiging voor Eventlijn', "Je bent uitgenodigd voor " . $state['name'] . ". Registreer je binnen zeven dagen via:\n\n" . $url);
+            MailQueue::add($state, $email, 'Uitnodiging voor Event Line', "Je bent uitgenodigd voor " . $state['name'] . ". Registreer je binnen zeven dagen via:\n\n" . $url);
             return [];
         }
         $id = self::text($input, 'id', 32);
@@ -246,7 +246,7 @@ final class Accounts
         if ($action === 'member.reject' && $member['status'] === 'pending') {
             $state['members'][$id]['status'] = 'rejected';
             $state['members'][$id]['sessionVersion']++;
-            MailQueue::add($state, $member['email'], 'Besluit over je Eventlijn-account', 'Je registratie is afgewezen. Neem voor vragen contact op met je organisatiebeheerder.');
+            MailQueue::add($state, $member['email'], 'Besluit over je Event Line-account', 'Je registratie is afgewezen. Neem voor vragen contact op met je organisatiebeheerder.');
             return [];
         }
         if (($action === 'member.approve' && $member['status'] !== 'pending')
@@ -265,7 +265,7 @@ final class Accounts
         $state['members'][$id]['manager'] = $managerId ?: null;
         if ($action === 'member.approve') {
             $state['members'][$id]['status'] = 'active';
-            MailQueue::add($state, $member['email'], 'Je Eventlijn-account is actief', 'Je kunt nu inloggen bij Eventlijn.');
+            MailQueue::add($state, $member['email'], 'Je Event Line-account is actief', 'Je kunt nu inloggen bij Event Line.');
         }
         return [];
     }
