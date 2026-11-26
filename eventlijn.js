@@ -323,9 +323,25 @@ function renderEvents() {
     const end = event.start === event.end ? event.start.slice(0, 4) : 't/m ' + shortDate.format(date(event.end));
     when.append(element('span', end));
     const details = element('div');
-    const metadata = [event.topic, event.location, event.kind === 'internal' ? 'Intern' : 'Extern'].filter(Boolean);
+    const isPublic = event.visibility === 'public';
+    const metadata = [event.topic, event.location, isPublic ? 'Openbaar' : 'Voor je organisatie'].filter(Boolean);
+    const participantCount = event.participantCount ?? Number(event.represented);
+    let attendance = 'Nog geen bevestigde deelname';
+    if (participantCount > 0) {
+      attendance = participantCount === 1 ? '1 bevestigde deelnemer' : participantCount + ' bevestigde deelnemers';
+    }
     details.append(element('h3', event.title), element('p', metadata.join(' · ')),
-      element('span', event.represented ? 'Organisatie vertegenwoordigd' : 'Nog geen deelname bekend', event.represented ? 'tag' : 'tag mutedtag'));
+      element('span', attendance, participantCount ? 'tag' : 'tag mutedtag'));
+    const actions = element('div', '', 'actions');
+    if (isPublic) {
+      const link = element('a', 'Openbare pagina', 'secondary');
+      link.href = 'openbaar.html?event=' + encodeURIComponent(state.organization.id + ':' + event.id);
+      actions.append(link);
+    }
+    if (state.actor.role === 'admin') {
+      actions.append(button('Zichtbaarheid aanpassen', () => editVisibility(event)));
+    }
+    if (actions.childElementCount) details.append(actions);
     card.append(when, details);
     if (event.end >= now) {
       card.append(button(event.registration === 'free' ? 'Inschrijven ↗' : 'Deelname aanvragen ↗', () => requestEvent(event)));
@@ -362,32 +378,59 @@ function addEvent() {
   const title = field('title', 'Naam evenement', { maxLength: 160 });
   const start = field('start', 'Startdatum', { type: 'date' });
   const end = field('end', 'Einddatum', { type: 'date' });
-  const kind = field('kind', 'Soort', { type: 'select', choices: [['external', 'Extern'], ['internal', 'Intern']] });
-  const registration = field('registration', 'Inschrijving', {
-    type: 'select', choices: [['approval', 'Met goedkeuring'], ['free', 'Vrije inschrijving']],
-  });
-  registration.hidden = true;
-  const fields = [title, start, end, field('location', 'Locatie (optioneel)', { required: false, maxLength: 180 }),
-    field('topic', 'Onderwerp (optioneel)', { required: false, maxLength: 120 }), kind, registration];
+  const locationField = field('location', 'Locatie (optioneel)', { required: false, maxLength: 180 });
+  const fields = [title, start, end, locationField,
+    field('topic', 'Onderwerp (optioneel)', { required: false, maxLength: 120 })];
+  if (state.actor.role === 'admin') {
+    fields.push(visibilityField(), field('registration', 'Inschrijving', {
+      type: 'select', choices: [['approval', 'Met goedkeuring'], ['free', 'Vrije inschrijving binnen de organisatie']],
+    }));
+  }
   const original = 'Controleer of het evenement al in de tijdlijn staat.';
   openDialog({ title: 'Evenement toevoegen', explanation: original, fields,
     action: { action: 'event.create' }, success: 'Het evenement staat op de tijdlijn.' });
-  title.querySelector('input').addEventListener('input', event => {
-    const key = titleKey(event.target.value);
-    const matches = key.length >= 4 ? state.events.filter(item => {
+  const titleInput = title.querySelector('input');
+  const startDate = start.querySelector('input');
+  const endDate = end.querySelector('input');
+  const locationInput = locationField.querySelector('input');
+  const suggestDuplicates = () => {
+    const key = titleKey(titleInput.value);
+    const locationKey = titleKey(locationInput.value);
+    const matches = state.events.filter(item => {
       const existing = titleKey(item.title);
-      return existing.includes(key) || (existing.length >= 4 && (key.includes(existing) || similarTitle(key, existing, 2)));
-    }).slice(0, 3) : [];
+      const titleMatch = key.length >= 4 && (
+        existing.includes(key) || (existing.length >= 4 && (key.includes(existing) || similarTitle(key, existing, 2)))
+      );
+      const datesOverlap = startDate.value && endDate.value >= startDate.value
+        && item.start <= endDate.value && item.end >= startDate.value;
+      const placeMatch = locationKey && locationKey === titleKey(item.location);
+      return titleMatch || (datesOverlap && placeMatch);
+    }).slice(0, 3);
     byId('dialogInfo').textContent = matches.length ? 'Mogelijk al aanwezig · ' + matches.map(item => item.title).join(', ') : original;
+  };
+  titleInput.addEventListener('input', suggestDuplicates);
+  locationInput.addEventListener('input', suggestDuplicates);
+  endDate.addEventListener('change', suggestDuplicates);
+  startDate.addEventListener('change', () => {
+    endDate.min = startDate.value;
+    if (!endDate.value || endDate.value < endDate.min) endDate.value = endDate.min;
+    suggestDuplicates();
   });
-  start.querySelector('input').addEventListener('change', event => {
-    const finalDate = end.querySelector('input');
-    finalDate.min = event.target.value;
-    if (!finalDate.value || finalDate.value < finalDate.min) finalDate.value = finalDate.min;
+}
+
+function visibilityField(current = 'organization') {
+  return field('visibility', 'Zichtbaarheid', {
+    type: 'select', value: current, choices: [['organization', 'Voor je organisatie'], ['public', 'Openbaar via link']],
   });
-  kind.querySelector('select').addEventListener('change', event => {
-    registration.hidden = event.target.value !== 'internal' || state.actor.role !== 'admin';
-    if (registration.hidden) registration.querySelector('select').value = 'approval';
+}
+
+function editVisibility(event) {
+  openDialog({
+    title: 'Zichtbaarheid aanpassen',
+    explanation: 'Bij openbare toegang kan iedereen met de link de titel, periode, locatie en het onderwerp bekijken.',
+    fields: [visibilityField(event.visibility)],
+    action: { action: 'event.visibility', eventId: event.id },
+    success: 'Zichtbaarheid aangepast.',
   });
 }
 

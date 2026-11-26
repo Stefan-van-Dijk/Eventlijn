@@ -55,6 +55,18 @@ try {
         header('Allow: GET, POST');
         reply(['error' => 'Deze methode is niet beschikbaar.'], 405);
     }
+    if ($method === 'GET' && isset($_GET['publicEvent'])) {
+        header('Access-Control-Allow-Origin: *');
+        $key = $_GET['publicEvent'];
+        if (!is_string($key) || preg_match('/\A([a-f0-9]{32}):([a-f0-9]{32})\z/', $key, $parts) !== 1) {
+            reply(['error' => 'Het evenement is niet gevonden.'], 404);
+        }
+        $event = Workflow::publicEvent($store->readExisting($parts[1]), $parts[2]);
+        if ($event === null) {
+            reply(['error' => 'Het evenement is niet gevonden.'], 404);
+        }
+        reply(['event' => $event]);
+    }
     if (session_status() !== PHP_SESSION_NONE) {
         throw new RuntimeException('Sessie startte buiten Event Line');
     }

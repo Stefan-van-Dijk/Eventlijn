@@ -19,6 +19,7 @@ final class Workflow
         self::requireActive($actor);
         return match ($action) {
             'event.create' => self::createEvent($state, $actor, $input),
+            'event.visibility' => self::setEventVisibility($state, $actor, $input),
             'request.create' => self::createRequest($state, $actor, $input),
             'request.decide', 'request.evaluate', 'request.close', 'spot.propose', 'spot.publish', 'spot.withdraw'
                 => self::updateRequest($state, $actor, $input, $action),
@@ -29,12 +30,12 @@ final class Workflow
     public static function view(array $state, array $actor): array
     {
         self::requireActive($actor);
-        $represented = [];
+        $participants = [];
         $spotlights = [];
         $requests = [];
         foreach ($state['requests'] as $request) {
             if (in_array($request['status'], self::ATTENDING, true)) {
-                $represented[$request['eventId']] = true;
+                $participants[$request['eventId']][$request['userId']] = true;
             }
             if (($request['spot']['status'] ?? null) === 'published') {
                 $spotlights[] = [
@@ -59,11 +60,38 @@ final class Workflow
         }
         $events = [];
         foreach ($state['events'] as $event) {
-            $event['represented'] = $represented[$event['id']] ?? false;
+            $event['participantCount'] = count($participants[$event['id']] ?? []);
+            $event['represented'] = $event['participantCount'] > 0;
+            $event['visibility'] = self::eventVisibility($event);
+            $event += self::sharedEventFields($event);
             $events[] = $event;
         }
         usort($events, static fn(array $left, array $right): int => $left['start'] <=> $right['start']);
         return ['events' => $events, 'requests' => array_reverse($requests), 'spotlights' => $spotlights];
+    }
+
+    public static function publicEvent(?array $state, string $id): ?array
+    {
+        $event = $state['events'][$id] ?? null;
+        if (!$event || self::eventVisibility($event) !== 'public') {
+            return null;
+        }
+        return array_intersect_key($event, array_flip(['title', 'start', 'end', 'location', 'topic']))
+            + self::sharedEventFields($event);
+    }
+
+    private static function eventVisibility(array $event): string
+    {
+        return ($event['visibility'] ?? null) === 'public' ? 'public' : 'organization';
+    }
+
+    private static function sharedEventFields(array $event): array
+    {
+        $fields = ['time' => ['kind' => 'date-range', 'start' => $event['start'], 'end' => $event['end']]];
+        if (isset($event['id12'])) {
+            $fields['ref'] = ['source' => 'event-line', 'id' => $event['id12'], 'class' => 'event'];
+        }
+        return $fields;
     }
 
     private static function createEvent(array &$state, array $actor, array $input): array
@@ -75,9 +103,14 @@ final class Workflow
             throw new AppError('De einddatum moet op of na de startdatum liggen.', 422);
         }
         $kind = self::choice($input['kind'] ?? 'external', ['external', 'internal']);
+        $visibility = self::choice($input['visibility'] ?? 'organization', ['organization', 'public']);
         $registration = self::choice($input['registration'] ?? 'approval', ['approval', 'free']);
-        if ($registration === 'free' && ($kind !== 'internal' || $actor['role'] !== 'admin')) {
-            throw new AppError('Organisatiebeheer kan vrije inschrijving instellen voor interne evenementen.', 403);
+        if ($visibility === 'public' && $actor['role'] !== 'admin') {
+            throw new AppError('Organisatiebeheer kan een evenement openbaar maken.', 403);
+        }
+        if ($registration === 'free' && ($actor['role'] !== 'admin'
+            || (!isset($input['visibility']) && $kind !== 'internal'))) {
+            throw new AppError('Organisatiebeheer kan vrije inschrijving instellen.', 403);
         }
 
         $normalized = self::normalizeTitle($title);
@@ -94,15 +127,39 @@ final class Workflow
         $id = EventStore::id();
         $state['events'][$id] = [
             'id' => $id,
+            'id12' => self::sharedId(),
             'title' => $title,
             'start' => $start,
             'end' => $end,
             'location' => self::text($input, 'location', 'De locatie is te lang.', 180, false),
             'topic' => self::text($input, 'topic', 'Het onderwerp is te lang.', 120, false),
             'kind' => $kind,
+            'visibility' => $visibility,
             'registration' => $registration,
         ];
         return ['id' => $id];
+    }
+
+    private static function setEventVisibility(array &$state, array $actor, array $input): array
+    {
+        if ($actor['role'] !== 'admin') {
+            throw new AppError('Organisatiebeheer kan de zichtbaarheid wijzigen.', 403);
+        }
+        $id = self::entityId($input['eventId'] ?? null);
+        if (!isset($state['events'][$id])) {
+            throw new AppError('Het evenement is niet gevonden.', 404);
+        }
+        $visibility = self::choice($input['visibility'] ?? null, ['organization', 'public']);
+        if ($visibility === 'public') {
+            $state['events'][$id]['id12'] ??= self::sharedId();
+        }
+        $state['events'][$id]['visibility'] = $visibility;
+        return ['id' => $id, 'visibility' => $visibility];
+    }
+
+    private static function sharedId(): string
+    {
+        return strtr(base64_encode(random_bytes(9)), '+/', '-_');
     }
 
     private static function createRequest(array &$state, array $actor, array $input): array

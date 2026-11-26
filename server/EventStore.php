@@ -14,6 +14,30 @@ final class EventStore {
         $this->directory = $dir;
     }
     public static function id(): string { return bin2hex(random_bytes(16)); }
+
+    public function readExisting(string $organization): ?array
+    {
+        if (preg_match('/\A[a-f0-9]{32}\z/', $organization) !== 1) {
+            return null;
+        }
+        $path = $this->directory.DIRECTORY_SEPARATOR.$organization.'.json';
+        if (is_link($path) || !is_file($path)) {
+            return null;
+        }
+        // Writers replace the complete document with an atomic rename.
+        return $this->readDocument($path, $organization);
+    }
+
+    private function readDocument(string $path, string $organization): array
+    {
+        $state = json_decode((string) file_get_contents($path), true, 128, JSON_THROW_ON_ERROR);
+        if (!is_array($state) || ($state['schema'] ?? null) !== 1 || ($state['organization'] ?? null) !== $organization
+            || !is_array($state['members'] ?? null) || !is_array($state['events'] ?? null) || !is_array($state['requests'] ?? null)) {
+            throw new RuntimeException('Invalid organization document');
+        }
+        return $state;
+    }
+
     public function transaction(string $organization, callable $change): mixed {
         if (!preg_match('/\A[a-f0-9]{32}\z/', $organization)) {
             throw new InvalidArgumentException('Invalid organization identifier');
@@ -26,12 +50,8 @@ final class EventStore {
         try {
             if (!chmod($path.'.lock', 0600) || !flock($lock, LOCK_EX)) throw new RuntimeException('Lock unavailable');
             $exists = is_file($path);
-            $state = $exists ? json_decode((string)file_get_contents($path), true, 128, JSON_THROW_ON_ERROR)
+            $state = $exists ? $this->readDocument($path, $organization)
                 : ['schema'=>1,'organization'=>$organization,'members'=>[],'events'=>[],'requests'=>[]];
-            if (!is_array($state) || ($state['schema'] ?? null)!==1 || ($state['organization'] ?? null)!==$organization
-                || !is_array($state['members'] ?? null) || !is_array($state['events'] ?? null) || !is_array($state['requests'] ?? null)) {
-                throw new RuntimeException('Invalid organization document');
-            }
             $before = $state;
             $result = $change($state);
             if ($state !== $before) {
