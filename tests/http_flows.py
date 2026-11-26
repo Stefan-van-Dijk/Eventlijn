@@ -1,4 +1,4 @@
-"""Run isolated Eventlijn account, workflow, and authorization tests over HTTP."""
+"""Run isolated Event Line account, workflow, and authorization tests over HTTP."""
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from http.cookiejar import CookieJar

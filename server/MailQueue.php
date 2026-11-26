@@ -34,7 +34,7 @@ final class MailQueue
 
     private static function send(Config $config, string $id, array $item): bool
     {
-        $item['body'] .= "\n\nEventlijn: " . $config->baseUrl;
+        $item['body'] .= "\n\nEvent Line: " . $config->baseUrl;
         if ($config->mailMode === 'file') {
             $dir = $config->directory . '/mail';
             if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {

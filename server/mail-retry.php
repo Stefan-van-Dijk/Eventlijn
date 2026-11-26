@@ -18,6 +18,6 @@ try {
     }
     echo "Resterende berichten: " . $remaining . PHP_EOL;
 } catch (Throwable $error) {
-    fwrite(STDERR, "Eventlijn: e-mailwachtrij niet beschikbaar. Controleer configuratie en rechten.\n");
+    fwrite(STDERR, "Event Line: e-mailwachtrij niet beschikbaar. Controleer configuratie en rechten.\n");
     exit(1);
 }

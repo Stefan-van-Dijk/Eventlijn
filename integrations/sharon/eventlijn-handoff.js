@@ -42,7 +42,7 @@ if (event) {
     }
   });
 } else {
-  status.textContent = 'Open vanuit Eventlijn een eigen goedgekeurde deelname om die hier te bewaren.';
+  status.textContent = 'Open vanuit Event Line een eigen goedgekeurde deelname om die hier te bewaren.';
 }
 
 function readHandoff(fragment) {

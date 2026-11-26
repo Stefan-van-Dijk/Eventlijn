@@ -34,19 +34,19 @@ function flushMail(EventStore $store, Config $config, ?string $org): void
     try {
         MailQueue::deliver($store, $config, $org);
     } catch (Throwable $error) {
-        error_log('Eventlijn: e-mail blijft in de wachtrij (' . get_class($error) . ').');
+        error_log('Event Line: e-mail blijft in de wachtrij (' . get_class($error) . ').');
     }
 }
 
 try {
     $config = new Config();
     if (!$config->local && ($_SERVER['HTTPS'] ?? 'off') !== 'on' && ($_SERVER['HTTPS'] ?? '') !== '1') {
-        reply(['error' => 'Gebruik de HTTPS-versie van Eventlijn.'], 403);
+        reply(['error' => 'Gebruik de HTTPS-versie van Event Line.'], 403);
     }
     $store = new EventStore($config->directory, $_SERVER['DOCUMENT_ROOT'] ?? '');
     $accounts = new Accounts($store, $config);
 } catch (Throwable $error) {
-    reply(['error' => 'Eventlijn is nog niet geconfigureerd of de opslag is niet beschikbaar.'], 503);
+    reply(['error' => 'Event Line is nog niet geconfigureerd of de opslag is niet beschikbaar.'], 503);
 }
 
 try {
@@ -56,7 +56,7 @@ try {
         reply(['error' => 'Deze methode is niet beschikbaar.'], 405);
     }
     if (session_status() !== PHP_SESSION_NONE) {
-        throw new RuntimeException('Sessie startte buiten Eventlijn');
+        throw new RuntimeException('Sessie startte buiten Event Line');
     }
     session_name('EVENTLIJN_SESSION');
     if (!session_start([
@@ -170,6 +170,6 @@ try {
 } catch (AppError $error) {
     reply(['error' => $error->getMessage()], $error->getCode());
 } catch (Throwable $error) {
-    error_log('Eventlijn API: ' . get_class($error) . ' in ' . basename($error->getFile()) . ':' . $error->getLine());
+    error_log('Event Line API: ' . get_class($error) . ' in ' . basename($error->getFile()) . ':' . $error->getLine());
     reply(['error' => 'De bewerking kon niet worden verwerkt. Probeer het opnieuw.'], 500);
 }
