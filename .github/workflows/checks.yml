@@ -1,0 +1,28 @@
+name: Event Line controles
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  accounts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Controleer JavaScript
+        run: node --check eventlijn.js && node --check openbaar.js
+      - name: Opslag en Sharon-accounts
+        run: php tests/storage.php && php tests/sharon_accounts.php
+      - name: Accounts en organisatieprocessen via HTTP
+        run: python3 tests/http_flows.py
+      - name: Appaanmelding zonder cookies
+        run: python3 tests/sharon_http.py

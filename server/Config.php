@@ -10,6 +10,7 @@ final class Config
     public readonly string $mailFrom;
     public readonly string $mailMode;
     public readonly string $sharonUrl;
+    public readonly string $sharonAppKey;
     public readonly bool $local;
 
     public function __construct()
@@ -22,9 +23,11 @@ final class Config
         $this->mailFrom = $read('MAIL_FROM');
         $this->mailMode = $read('MAIL_MODE') ?: 'sendmail';
         $this->sharonUrl = $read('SHARON_URL');
+        $this->sharonAppKey = $read('SHARON_APP_KEY');
         $url = parse_url($this->baseUrl);
         $this->local = $this->mailMode === 'file' && in_array($url['host'] ?? '', ['127.0.0.1', 'localhost', '[::1]'], true);
-        if (!$this->directory || !filter_var($this->mailFrom, FILTER_VALIDATE_EMAIL)
+        if (($this->sharonAppKey !== '' && !preg_match('/\A[A-Za-z0-9_-]{32,128}\z/', $this->sharonAppKey))
+            || !$this->directory || !filter_var($this->mailFrom, FILTER_VALIDATE_EMAIL)
             || !in_array($this->mailMode, ['sendmail', 'file'], true)
             || ($this->mailMode === 'file' && !$this->local)
             || (($url['scheme'] ?? '') !== 'https' && !($this->local && ($url['scheme'] ?? '') === 'http'))

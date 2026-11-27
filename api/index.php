@@ -67,37 +67,74 @@ try {
         }
         reply(['event' => $event]);
     }
-    if (session_status() !== PHP_SESSION_NONE) {
-        throw new RuntimeException('Sessie startte buiten Event Line');
+    $input = [];
+    $action = '';
+    if ($method === 'POST') {
+        if (strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '', 2)[0])) !== 'application/json') {
+            throw new AppError('Gebruik JSON voor dit verzoek.', 415);
+        }
+        $raw = file_get_contents('php://input', false, null, 0, 65537);
+        if ($raw === false || strlen($raw) > 65536) {
+            throw new AppError('Dit verzoek is te groot.', 413);
+        }
+        $input = json_decode($raw, true, 24);
+        if (!is_array($input) || !is_string($input['action'] ?? null)) {
+            throw new AppError('Ongeldig verzoek.', 400);
+        }
+        $action = $input['action'];
     }
-    session_name('EVENTLIJN_SESSION');
-    if (!session_start([
-        'use_strict_mode' => true,
-        'use_only_cookies' => true,
-        'use_trans_sid' => false,
-        'cookie_path' => $config->cookiePath(),
-        'cookie_domain' => '',
-        'cookie_secure' => !$config->local,
-        'cookie_httponly' => true,
-        'cookie_samesite' => 'Strict',
-    ])) {
-        throw new RuntimeException('Sessie niet beschikbaar');
+    $bearer = null;
+    $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+    if ($authorization !== '') {
+        if (!preg_match('/\ABearer ([A-Za-z0-9_-]{43})\z/', $authorization, $parts)) {
+            throw new AppError('De app-aanmelding is verlopen.', 401);
+        }
+        $bearer = $parts[1];
     }
-    $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
-    $session = $_SESSION['account'] ?? [];
-    if (time() - ($session['lastSeen'] ?? 0) > 7200) {
-        unset($_SESSION['account']);
-        $session = [];
-    } elseif ($session) {
-        $_SESSION['account']['lastSeen'] = time();
+    $embeddedLogin = $action === 'auth.sharon' && ($input['embedded'] ?? false) === true;
+    $csrf = '';
+    $session = [];
+    if ($bearer !== null) {
+        $session = $accounts->readAppSession($bearer);
+        if (str_starts_with($action, 'auth.') && $action !== 'auth.logout') {
+            throw new AppError('Open de app opnieuw vanuit Sharon om van account te wisselen.', 400);
+        }
+    } elseif (!$embeddedLogin) {
+        if (session_status() !== PHP_SESSION_NONE) {
+            throw new RuntimeException('Sessie startte buiten Event Line');
+        }
+        session_name('EVENTLIJN_SESSION');
+        if (!session_start([
+            'use_strict_mode' => true,
+            'use_only_cookies' => true,
+            'use_trans_sid' => false,
+            'cookie_path' => $config->cookiePath(),
+            'cookie_domain' => '',
+            'cookie_secure' => !$config->local,
+            'cookie_httponly' => true,
+            'cookie_samesite' => 'Strict',
+        ])) {
+            throw new RuntimeException('Sessie niet beschikbaar');
+        }
+        $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+        $csrf = $_SESSION['csrf'];
+        $session = $_SESSION['account'] ?? [];
+        if (time() - ($session['lastSeen'] ?? 0) > 7200) {
+            unset($_SESSION['account']);
+            $session = [];
+        } elseif ($session) {
+            $_SESSION['account']['lastSeen'] = time();
+        }
     }
     $scope = $session['org'] ?? null;
     if ($method === 'GET') {
         $view = [
-            'csrf' => $_SESSION['csrf'], 'actor' => null, 'organization' => null, 'members' => [],
+            'csrf' => $csrf, 'actor' => null, 'organization' => null, 'members' => [],
             'events' => [], 'requests' => [], 'spotlights' => [], 'sharonEnabled' => Sharon::enabled($config->sharonUrl),
         ];
-        session_write_close();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
         if ($scope !== null) {
             $view = $store->transaction($scope, static function (array $state) use ($view, $session): array {
                 $actor = sessionActor($state, $session);
@@ -118,27 +155,29 @@ try {
         reply($view);
     }
 
-    if (!hash_equals($_SESSION['csrf'], $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
+    if ($bearer === null && !$embeddedLogin && !hash_equals($csrf, $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
         throw new AppError('Je sessie is verlopen. Laad de pagina opnieuw.', 403);
     }
-    if (strtolower(trim(explode(';', $_SERVER['CONTENT_TYPE'] ?? '', 2)[0])) !== 'application/json') {
-        throw new AppError('Gebruik JSON voor dit verzoek.', 415);
-    }
-    $raw = file_get_contents('php://input', false, null, 0, 65537);
-    if ($raw === false || strlen($raw) > 65536) {
-        throw new AppError('Dit verzoek is te groot.', 413);
-    }
-    $input = json_decode($raw, true, 24);
-    if (!is_array($input) || !is_string($input['action'] ?? null)) {
-        throw new AppError('Ongeldig verzoek.', 400);
-    }
-    $action = $input['action'];
     $result = [];
     $deliver = null;
     if (str_starts_with($action, 'auth.')) {
         if ($action === 'auth.logout') {
-            $_SESSION = [];
-            session_regenerate_id(true);
+            if ($bearer !== null) {
+                $accounts->revokeAppSession($bearer);
+            } else {
+                $_SESSION = [];
+                session_regenerate_id(true);
+            }
+        } elseif ($action === 'auth.sharon') {
+            $accounts->rateLimit($action, 25, 900);
+            $claims = Sharon::redeemAccount($config->sharonAppKey, Accounts::text($input, 'code', 43));
+            $account = $accounts->loginSharon($claims);
+            if ($embeddedLogin) {
+                $result = ['appToken' => $accounts->createAppSession($account)];
+            } else {
+                session_regenerate_id(true);
+                $_SESSION = ['account' => $account + ['lastSeen' => time()], 'csrf' => bin2hex(random_bytes(32))];
+            }
         } elseif ($action === 'auth.login') {
             $accounts->rateLimit($action, 25, 900);
             $account = $accounts->login($input);
@@ -176,7 +215,9 @@ try {
         });
         $deliver = $scope;
     }
-    session_write_close();
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
     flushMail($store, $config, $deliver);
     reply(['ok' => true] + $result);
 } catch (AppError $error) {
