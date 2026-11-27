@@ -184,6 +184,107 @@ final class Accounts
         return $account + ['version' => $member['sessionVersion']];
     }
 
+    public function loginSharon(array $claims): array
+    {
+        $sharonId = self::text($claims, 'id', 12);
+        $personId = self::text($claims, 'personId', 12);
+        if (!preg_match('/\A[A-Za-z0-9_-]{12}\z/', $sharonId)
+            || !preg_match('/\A[A-Za-z0-9_-]{12}\z/', $personId)) {
+            throw new AppError('Ongeldige Sharon-identiteit.', 403);
+        }
+        $email = self::email($claims);
+        $name = self::text($claims, 'name', 240);
+        return $this->store->transaction(self::REGISTRY, function (array &$registry) use ($sharonId, $personId, $email, $name): array {
+            $linked = $registry['sharonAccounts'][$sharonId] ?? null;
+            $existing = $registry['accounts'][hash('sha256', $email)] ?? null;
+            if ($linked && ($linked['personId'] !== $personId || $linked['email'] !== $email
+                    || $existing === null || $linked['org'] !== $existing['org'] || $linked['id'] !== $existing['id'])) {
+                throw new AppError('De Sharon-identiteit hoort bij een ander Event Line-account.', 409);
+            }
+            if ($existing !== null) {
+                foreach ($registry['sharonAccounts'] ?? [] as $id => $binding) {
+                    if ($id !== $sharonId && $binding['org'] === $existing['org'] && $binding['id'] === $existing['id']) {
+                        throw new AppError('Dit Event Line-account is al met een ander Sharon-account verbonden.', 409);
+                    }
+                }
+                $version = $this->store->transaction($existing['org'], static function (array $state) use ($existing, $email): int {
+                    $member = $state['members'][$existing['id']] ?? null;
+                    if (!$member || $member['email'] !== $email || !in_array($member['status'], ['active', 'pending'], true)) {
+                        throw new AppError('Dit Event Line-account heeft nog geen toegang. Controleer de e-mailbevestiging of neem contact op met de beheerder.', 403);
+                    }
+                    return $member['sessionVersion'];
+                });
+                $account = $existing;
+            } else {
+                $account = ['org' => EventStore::id(), 'id' => EventStore::id()];
+                $version = 1;
+                $this->store->transaction($account['org'], static function (array &$state) use ($account, $name, $email): void {
+                    $state['name'] = 'Persoonlijk';
+                    $state['members'][$account['id']] = [
+                        'id' => $account['id'], 'name' => $name, 'email' => $email,
+                        'password' => password_hash(bin2hex(random_bytes(32)), PASSWORD_DEFAULT),
+                        'role' => 'admin', 'manager' => null, 'managerEmail' => null,
+                        'status' => 'active', 'sessionVersion' => 1,
+                    ];
+                });
+                $registry['accounts'][hash('sha256', $email)] = $account;
+                $registry['organizations'][$account['org']] = true;
+            }
+            $registry['sharonAccounts'][$sharonId] = $account + ['personId' => $personId, 'email' => $email];
+            return $account + ['version' => $version];
+        });
+    }
+
+    public function createAppSession(array $account): string
+    {
+        $token = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
+        $this->store->transaction(self::REGISTRY, static function (array &$state) use ($token, $account): void {
+            foreach ($state['appSessions'] ?? [] as $hash => $entry) {
+                if ($entry['until'] <= time()) {
+                    unset($state['appSessions'][$hash]);
+                }
+            }
+            $owned = array_keys(array_filter($state['appSessions'] ?? [], static fn(array $entry): bool =>
+                $entry['account']['org'] === $account['org'] && $entry['account']['id'] === $account['id']));
+            foreach (array_slice($owned, 0, max(0, count($owned) - 19)) as $hash) {
+                unset($state['appSessions'][$hash]);
+            }
+            $state['appSessions'][hash('sha256', $token)] = ['account' => $account, 'until' => time() + 7200];
+        });
+        return $token;
+    }
+
+    public function readAppSession(string $token): array
+    {
+        if (!preg_match('/\A[A-Za-z0-9_-]{43}\z/', $token)) {
+            throw new AppError('De app-aanmelding is verlopen.', 401);
+        }
+        return $this->store->transaction(self::REGISTRY, function (array &$state) use ($token): array {
+            $hash = hash('sha256', $token);
+            $entry = $state['appSessions'][$hash] ?? null;
+            if (!$entry || $entry['until'] <= time()) {
+                throw new AppError('De app-aanmelding is verlopen.', 401);
+            }
+            $account = $entry['account'];
+            $valid = $this->store->transaction($account['org'], static function (array $organization) use ($account): bool {
+                $member = $organization['members'][$account['id']] ?? null;
+                return $member && $member['sessionVersion'] === $account['version']
+                    && in_array($member['status'], ['active', 'pending'], true);
+            });
+            if (!$valid) {
+                throw new AppError('De app-aanmelding is verlopen.', 401);
+            }
+            return $account;
+        });
+    }
+
+    public function revokeAppSession(string $token): void
+    {
+        $this->store->transaction(self::REGISTRY, static function (array &$state) use ($token): void {
+            unset($state['appSessions'][hash('sha256', $token)]);
+        });
+    }
+
     public function forgot(array $input): ?string
     {
         $email = self::email($input);

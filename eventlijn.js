@@ -2,11 +2,13 @@
 
 const byId = id => document.getElementById(id);
 const apiUrl = 'api/index.php';
-const sharonHostOrigins = new Set(['https://sharon.life', 'https://stefan-van-dijk.github.io']);
+let sharonAccountOrigin = null;
+const sharonHostOrigins = new Set(['https://sharon.life', 'https://www.sharon.life', 'https://stefan-van-dijk.github.io']);
 
 if (window.parent !== window && document.referrer && new URLSearchParams(location.search).get('from') === 'sharon') {
   const hostOrigin = new URL(document.referrer).origin;
   if (sharonHostOrigins.has(hostOrigin)) {
+    sharonAccountOrigin = hostOrigin;
     const back = byId('returnToSharon');
     back.addEventListener('click', () => window.parent.postMessage({ type: 'eventline:return' }, hostOrigin));
     back.hidden = false;
@@ -45,6 +47,7 @@ const normalize = value => String(value ?? '').toLowerCase().normalize('NFD').re
 const titleKey = value => normalize(value).replace(/[^\p{L}\p{N}]/gu, '');
 
 let state;
+let appToken = null;
 let view = 'events';
 let mode = 'login';
 let dialogAction;
@@ -122,10 +125,13 @@ function message(target, text = '', error = false) {
 }
 
 async function api(payload) {
-  const options = { credentials: 'same-origin', cache: 'no-store' };
+  const embedded = Boolean(sharonAccountOrigin);
+  const options = { credentials: embedded ? 'omit' : 'same-origin', cache: 'no-store', headers: {} };
+  if (appToken) options.headers.Authorization = 'Bearer ' + appToken;
   if (payload) {
     options.method = 'POST';
-    options.headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf };
+    options.headers['Content-Type'] = 'application/json';
+    if (!embedded) options.headers['X-CSRF-Token'] = state.csrf;
     options.body = JSON.stringify(payload);
   }
   const response = await fetch(apiUrl, options);
@@ -137,6 +143,13 @@ async function api(payload) {
 }
 
 async function refresh() {
+  if (sharonAccountOrigin && !appToken) {
+    byId('workspace').hidden = true;
+    byId('accountBar').hidden = true;
+    byId('addEvent').hidden = true;
+    message(status, 'Je bent uitgelogd. Open Event Line opnieuw vanuit Sharon.');
+    return;
+  }
   state = await api();
   render();
 }
@@ -704,10 +717,62 @@ byId('cancel').addEventListener('click', () => { if (!busy) dialog.close(); });
 dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
 byId('logout').addEventListener('click', event => {
   void mutate({ action: 'auth.logout' }, { trigger: event.currentTarget, after: () => {
+    appToken = null;
     view = 'events';
     byId('search').value = '';
     byId('filter').value = 'all';
   } });
 });
 
-void refresh().catch(error => message(status, error.message, true));
+function requestSharonAccount() {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timeout);
+      window.removeEventListener('message', receive);
+    };
+    const receive = event => {
+      if (event.source !== window.parent || event.origin !== sharonAccountOrigin) return;
+      if (event.data?.type === 'eventline:account-error') {
+        cleanup();
+        reject(new Error('Je Sharon-aanmelding kon niet worden bevestigd. Open Event Line opnieuw vanuit Sharon.'));
+      }
+      if (event.data?.type !== 'eventline:account-code') return;
+      cleanup();
+      if (typeof event.data.code !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(event.data.code)) {
+        reject(new Error('De Sharon-aanmeldcode is ongeldig.'));
+        return;
+      }
+      resolve(event.data.code);
+    };
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('De verbinding met je Sharon-account duurt te lang. Open Event Line opnieuw vanuit Sharon.'));
+    }, 15000);
+    window.addEventListener('message', receive);
+    window.parent.postMessage({ type: 'eventline:account-request' }, sharonAccountOrigin);
+  });
+}
+
+async function start() {
+  if (!sharonAccountOrigin) {
+    await refresh();
+    return;
+  }
+  message(status, 'Verbinden met je Sharon-account…');
+  try {
+    const code = await requestSharonAccount();
+    const result = await api({ action: 'auth.sharon', code, embedded: true });
+    if (typeof result.appToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(result.appToken)) throw new Error('Event Line kon je account niet openen.');
+    appToken = result.appToken;
+    message(status);
+    await refresh();
+  } catch (error) {
+    appToken = null;
+    byId('workspace').hidden = true;
+    byId('accountBar').hidden = true;
+    byId('addEvent').hidden = true;
+    message(status, error.message, true);
+  }
+}
+
+void start().catch(error => message(status, error.message, true));
