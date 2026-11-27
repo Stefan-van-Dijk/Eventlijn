@@ -2,6 +2,17 @@
 
 const byId = id => document.getElementById(id);
 const apiUrl = 'api/index.php';
+const sharonHostOrigins = new Set(['https://sharon.life', 'https://stefan-van-dijk.github.io']);
+
+if (window.parent !== window && document.referrer && new URLSearchParams(location.search).get('from') === 'sharon') {
+  const hostOrigin = new URL(document.referrer).origin;
+  if (sharonHostOrigins.has(hostOrigin)) {
+    const back = byId('returnToSharon');
+    back.addEventListener('click', () => window.parent.postMessage({ type: 'eventline:return' }, hostOrigin));
+    back.hidden = false;
+    window.parent.postMessage({ type: 'eventline:return-ready' }, hostOrigin);
+  }
+}
 const access = byId('access');
 const accessForm = byId('accessForm');
 const dialog = byId('dialog');
