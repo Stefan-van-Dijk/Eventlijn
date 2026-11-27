@@ -1,0 +1,9 @@
+# Evenementen, tijd en zichtbaarheid
+
+Event Line beheert evenementen en deelname in het bestaande organisatiebestand. Aanvragen blijven gekoppeld aan het bestaande evenement-ID. Een nieuw evenement krijgt daarnaast bij aanmaak een blijvende ID12, zodat Sharon het evenement met `{"source":"event-line","id":"…","class":"event"}` kan aanduiden. Eerder opgeslagen evenementen houden hun ID. Bij een expliciete openbaarmaking krijgt een bestaand evenement ook een ID12 als die nog ontbreekt. Het uitlezen van oudere evenementen verandert geen opgeslagen gegevens.
+
+De bron bewaart de bestaande start- en einddatum als kalenderdatums. De API biedt daarop een afgeleide tijdprojectie `{"kind":"date-range","start":"2027-03-20","end":"2027-03-21"}`. Beide kalenderdagen tellen mee. De projectie introduceert geen uren of tijdzone en bewaart de datums op één plek.
+
+Evenementen zijn standaard zichtbaar voor actieve leden van hun organisatie. Een organisatiebeheerder kan elk evenement expliciet openbaar maken, de link delen en de openbare toegang weer intrekken. De leesroute `GET api/index.php?publicEvent=<organisatie-id>:<evenement-id>` ondersteunt anonieme, cross-origin aanvragen zonder cookies. De route geeft alleen titel, kalenderdatums, locatie, onderwerp en de beschikbare bronreferentie. Openbare bezoekers kunnen het evenement lezen. Deelname en aanvragen volgen de bestaande organisatie- en rolrechten. Bestaande API-aanroepen met `kind` behouden hun gedrag. De huidige UI gebruikt zichtbaarheid en inschrijvingsbeleid.
+
+De deelnameteller is voor actieve organisatieleden. De teller telt ieder lid eenmaal per evenement op basis van goedgekeurde of afgesloten aanvragen, ook bij meerdere bezoekdagen. De suggestie voor een mogelijk duplicaat gebruikt titelovereenkomst of dezelfde genormaliseerde locatienaam én overlappende kalenderdagen. De suggestie gebruikt evenementen die al in de geautoriseerde tijdlijn staan en laat de beslissing bij de gebruiker.
