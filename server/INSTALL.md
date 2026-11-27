@@ -28,3 +28,5 @@ Volg `optioneel-sharon/INSTALL.md` uit het pakket. In Event Line kan iemand na g
 ## 4. Doorlopend beheer
 
 Vervang bij volgende releases de applicatiebestanden en behoud `server/config.local.php` en de private datamap. Stop bij terugzetten eerst alle schrijfacties en herstel de accountindex en alle organisatiebestanden uit hetzelfde back-upmoment. Controleer de versie, sessies en e-mail na de update. Gebruik bij deze eerste versie één organisatie per e-mailadres. Accounts kunnen ook als leidinggevende zelf deelnemen zodra een andere actieve beoordelaar is toegewezen. Een beheerder die tegelijk leidinggevende is, legt beide besluiten expliciet vast.
+
+Bij de update met openbare evenementen blijven het bestaande pad `/eventlijn/` en de huidige instellingen bruikbaar. Upload ook `openbaar.html` en `openbaar.js`. Gebruik op een testinstallatie een fictief evenement om als beheerder de openbare toegang aan en uit te zetten. Controleer de link in een privévenster en herlaad na intrekken. Bij de eerste expliciete openbaarmaking van een ouder evenement bewaart Event Line de nieuwe ID12 in het bestaande organisatiebestand.

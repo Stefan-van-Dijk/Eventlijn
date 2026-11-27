@@ -245,6 +245,20 @@ def run_flows(base, directory):
     other_admin.post('member.approve', id=employee_row['id'], allowed=False)
 
     event = create_event(employee, 'Geveltechniek <bezoek>')
+    assert event['visibility'] == 'organization'
+    assert event['ref'] == {'source': 'event-line', 'id': event['id12'], 'class': 'event'}
+    assert re.fullmatch(r'[A-Za-z0-9_-]{12}', event['id12'])
+    assert event['time'] == {'kind': 'date-range', 'start': DAY, 'end': TOMORROW}
+    org_id = admin.state()['organization']['id']
+    public_path = f"api/index.php?publicEvent={org_id}:{event['id']}"
+    public_visitor = Client(base)
+    assert public_visitor.call(path=public_path)[0] == 404
+    assert not list(public_visitor.cookies)
+    assert public_visitor.call(path='api/index.php?publicEvent%5B%5D=invalid')[0] == 404
+    employee.post('event.create', title='Onbevoegde publicatie', start=DAY, end=TOMORROW,
+                  visibility='public', expected_status=403)
+    employee.post('event.visibility', eventId=event['id'], visibility='public', expected_status=403)
+    other_admin.post('event.visibility', eventId=event['id'], visibility='public', expected_status=404)
     employee.post('event.create', title=event['title'], start=DAY, end=TOMORROW,
                   kind='external', registration='approval', allowed=False)
     employee.post('request.create', eventId=event['id'], day='2020-01-01',
@@ -279,7 +293,20 @@ def run_flows(base, directory):
     admin.post('request.decide', requestId=request_id, decision='approve')
     assert request_by_id(employee, request_id)['status'] == 'approved'
     assert next(row for row in employee.state()['events'] if row['id'] == event['id'])['represented']
+    admin.post('event.visibility', eventId=event['id'], visibility='public')
+    status_code, headers, public = public_visitor.call(path=public_path)
+    assert status_code == 200 and 'no-store' in headers['Cache-Control']
+    assert headers['Access-Control-Allow-Origin'] == '*'
+    assert 'Set-Cookie' not in headers and not list(public_visitor.cookies)
+    assert public['event'] == {key: event[key] for key in ('title', 'start', 'end', 'location', 'topic', 'ref', 'time')}
+    assert public_visitor.call(path='openbaar.html')[0] == 200
+    assert other_employee.call(path=public_path)[0] == 200
+    assert not other_employee.state()['events']
+    assert next(row for row in coworker.state()['events'] if row['id'] == event['id'])['participantCount'] == 1
+    admin.post('event.visibility', eventId=event['id'], visibility='organization')
+    assert public_visitor.call(path=public_path)[0] == 404
     print('OK external event, two-stage approval, and organisation isolation')
+    print('OK explicit event visibility, anonymous projection, revocation and ID12 source reference')
 
     manager.post('sharon.handoff', id=request_id, allowed=False)
     admin.post('sharon.handoff', id=request_id, allowed=False)
@@ -318,10 +345,16 @@ def run_flows(base, directory):
     manager.post('request.decide', requestId=rejection['id'], decision='reject', reason='Niet mogelijk')
     assert request_by_id(employee, rejection['id'])['status'] == 'rejected_manager'
     admin.post('request.decide', requestId=rejection['id'], decision='approve')
+    assert next(row for row in coworker.state()['events'] if row['id'] == event['id'])['participantCount'] == 1
     employee.post('request.evaluate', requestId=rejection['id'], outcome='Te vroeg', allowed=False)
     admin.post('request.decide', requestId=rejection['id'], decision='revoke', reason='Planning gewijzigd')
     assert request_by_id(employee, rejection['id'])['status'] == 'revoked'
     employee.post('sharon.handoff', id=rejection['id'], allowed=False)
+    coworker_request = request_for(coworker, event, goal='Samen leren', benefit='Kennis delen')
+    manager.post('request.decide', requestId=coworker_request['id'], decision='approve')
+    admin.post('request.decide', requestId=coworker_request['id'], decision='approve')
+    assert next(row for row in employee.state()['events'] if row['id'] == event['id'])['participantCount'] == 2
+    print('OK unique participant counts across visit days')
     print('OK limited Sharon handoff, evaluation, spotlight, free registration and rejection')
 
     employee.post('auth.forgot', email=employee_mail)

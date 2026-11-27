@@ -40,3 +40,5 @@ a.secondary:focus-visible { outline: 3px solid #93b4ff; outline-offset: 2px; }
   border-radius: 12px;
   background: #f7f4ed;
 }
+.event .actions { margin-top: 10px; }
+.event .actions .secondary { display: inline-block; padding: 7px 12px; font-size: 13px; text-decoration: none; }
